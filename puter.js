@@ -3,6 +3,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const messagesDiv = document.getElementById("messages");
   const sendBtn = document.getElementById("send-btn");
   const editorElement = document.getElementById("editor");
+  const themeToggle = document.getElementById("theme-toggle");
+  const sunIcon = document.getElementById("sun-icon");
+  const moonIcon = document.getElementById("moon-icon");
 
   // State
   const conversation = [];
@@ -27,6 +30,23 @@ document.addEventListener("DOMContentLoaded", () => {
     viewportMargin: Infinity,
     scrollbarStyle: "null",
     lineWiseCopyCut: false,
+  });
+
+  // Theme Toggle
+  const savedTheme =
+    localStorage.getItem("theme") ||
+    (window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light");
+  document.documentElement.setAttribute("data-theme", savedTheme);
+  updateIcons(savedTheme);
+
+  themeToggle.addEventListener("click", () => {
+    const currentTheme = document.documentElement.getAttribute("data-theme");
+    const newTheme = currentTheme === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem("theme", newTheme);
+    updateIcons(newTheme);
   });
 
   // Auto-resize the editor
@@ -80,6 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function addMessage(content, sender) {
     const messageElement = document.createElement("div");
     messageElement.className = `message ${sender}`;
+    messageElement.style.position = "relative"; // For absolute positioning of copy button
 
     const now = new Date();
     const timeString = now.toLocaleTimeString([], {
@@ -90,11 +111,45 @@ document.addEventListener("DOMContentLoaded", () => {
     const header = document.createElement("div");
     header.className = "message-header";
     header.innerHTML = `
-        <span>${sender === "user" ? "You" : "AI Assistant"}</span>
-        <span class="message-time">${timeString}</span>
-      `;
+      <span>${sender === "user" ? "You" : "AI Assistant"}</span>
+      <span class="message-time">${timeString}</span>
+    `;
 
     messageElement.appendChild(header);
+
+    // Add copy button for AI messages
+    if (sender === "ai") {
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "copy-message-btn";
+      copyBtn.title = "Copy message";
+      copyBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      `;
+
+      copyBtn.addEventListener("click", () => {
+        navigator.clipboard
+          .writeText(content)
+          .then(() => {
+            const originalHTML = copyBtn.innerHTML;
+            copyBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          `;
+            setTimeout(() => {
+              copyBtn.innerHTML = originalHTML;
+            }, 2000);
+          })
+          .catch((err) => {
+            console.error("Failed to copy message: ", err);
+          });
+      });
+
+      messageElement.appendChild(copyBtn);
+    }
 
     // Process message content for code blocks
     const contentWithCode = processMessageContent(content);
@@ -139,15 +194,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const header = document.createElement("div");
         header.className = "code-block-header";
         header.innerHTML = `
-            <span>${language}</span>
-            <button class="copy-btn" title="Copy to clipboard">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              <span>Copy</span>
-            </button>
-          `;
+          <span>${language}</span>
+          <button class="copy-btn" title="Copy to clipboard">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>Copy</span>
+          </button>
+        `;
 
         // Add code content
         const codeContentDiv = document.createElement("div");
@@ -180,11 +235,11 @@ document.addEventListener("DOMContentLoaded", () => {
               const originalHTML = copyBtn.innerHTML;
               copyBtn.classList.add("copied");
               copyBtn.innerHTML = `
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                <span>Copied!</span>
-              `;
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Copied!</span>
+            `;
               setTimeout(() => {
                 copyBtn.classList.remove("copied");
                 copyBtn.innerHTML = originalHTML;
@@ -277,40 +332,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Update theme icons
+  function updateIcons(theme) {
+    if (theme === "dark") {
+      sunIcon.style.display = "block";
+      moonIcon.style.display = "none";
+    } else {
+      sunIcon.style.display = "none";
+      moonIcon.style.display = "block";
+    }
+  }
+
   // Initialize
   updateSendButtonState();
   editor.focus();
 });
-
-// Theme Toggle
-const themeToggle = document.getElementById("theme-toggle");
-const sunIcon = document.getElementById("sun-icon");
-const moonIcon = document.getElementById("moon-icon");
-
-// Check for saved theme preference or use system preference
-const savedTheme =
-  localStorage.getItem("theme") ||
-  (window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light");
-document.documentElement.setAttribute("data-theme", savedTheme);
-updateIcons(savedTheme);
-
-themeToggle.addEventListener("click", () => {
-  const currentTheme = document.documentElement.getAttribute("data-theme");
-  const newTheme = currentTheme === "dark" ? "light" : "dark";
-
-  document.documentElement.setAttribute("data-theme", newTheme);
-  localStorage.setItem("theme", newTheme);
-  updateIcons(newTheme);
-});
-
-function updateIcons(theme) {
-  if (theme === "dark") {
-    sunIcon.style.display = "block";
-    moonIcon.style.display = "none";
-  } else {
-    sunIcon.style.display = "none";
-    moonIcon.style.display = "block";
-  }
-}
