@@ -1,347 +1,521 @@
-document.addEventListener("DOMContentLoaded", () => {
+// Main application
+const ChatApp = (() => {
   // DOM Elements
-  const messagesDiv = document.getElementById("messages");
+  const messagesContainer = document.getElementById("messages");
   const sendBtn = document.getElementById("send-btn");
   const editorElement = document.getElementById("editor");
   const themeToggle = document.getElementById("theme-toggle");
   const sunIcon = document.getElementById("sun-icon");
   const moonIcon = document.getElementById("moon-icon");
+  const newConversationBtn = document.getElementById("new-conversation-btn");
+  const sidebarToggle = document.getElementById("sidebar-toggle");
+  const conversationList = document.getElementById("conversation-list");
+  const appContainer = document.querySelector(".app-container");
+  const searchInput = document.getElementById("search-conversations");
+  const toggleArchivedBtn = document.getElementById("toggle-archived");
+  const exportBtn = document.getElementById("export-btn");
+  const importBtn = document.getElementById("import-btn");
+  const currentConversationTitle = document.getElementById("current-conversation-title");
+
 
   // State
-  const conversation = [];
+  let conversations = [];
+  let currentConversationId = null;
   let isProcessing = false;
+  let showArchived = false;
+  let editor;
 
-  // Initialize CodeMirror
-  const editor = CodeMirror.fromTextArea(editorElement, {
-    mode: "javascript",
-    theme: "default",
-    lineNumbers: false,
-    lineWrapping: true,
-    autoCloseBrackets: true,
-    matchBrackets: true,
-    indentUnit: 2,
-    tabSize: 2,
-    placeholder: "Type your message or code here...",
-    extraKeys: {
-      "Ctrl-Enter": sendMessage,
-      "Cmd-Enter": sendMessage,
-      "Shift-Enter": "newlineAndIndentKeepMarkers",
-    },
-    viewportMargin: Infinity,
-    scrollbarStyle: "null",
-    lineWiseCopyCut: false,
-  });
-
-  // Theme Toggle
-  const savedTheme =
-    localStorage.getItem("theme") ||
-    (window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light");
-  document.documentElement.setAttribute("data-theme", savedTheme);
-  updateIcons(savedTheme);
-
-  themeToggle.addEventListener("click", () => {
-    const currentTheme = document.documentElement.getAttribute("data-theme");
-    const newTheme = currentTheme === "dark" ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", newTheme);
-    localStorage.setItem("theme", newTheme);
-    updateIcons(newTheme);
-  });
-
-  // Auto-resize the editor
-  editor.on("change", function () {
-    updateSendButtonState();
-    autoResizeEditor();
-  });
-
-  function autoResizeEditor() {
-    const scrollHeight = editor.doc.height;
-    const lineHeight = editor.defaultTextHeight();
-    const maxHeight = window.innerWidth < 640 ? 150 : 200;
-    const newHeight = Math.min(
-      Math.max(scrollHeight * lineHeight, 60),
-      maxHeight
-    );
-
-    editor.setSize(null, newHeight);
-    document.querySelector(".CodeMirror").style.height = newHeight + "px";
-  }
-
-  // Initial resize
-  setTimeout(autoResizeEditor, 0);
-
-  // Handle window resize
-  let resizeTimeout;
-  window.addEventListener("resize", () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(autoResizeEditor, 100);
-  });
-
-  // Event Listeners
-  sendBtn.addEventListener("click", sendMessage);
-  editor.on("keydown", (cm, event) => {
-    if (event.key === "Enter" && event.shiftKey) {
-      // Allow Shift+Enter for new lines
-      return;
-    } else if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
-      event.preventDefault();
-      sendMessage();
-    }
-  });
-
-  // Update send button state based on input
-  function updateSendButtonState() {
-    const hasContent = editor.getValue().trim().length > 0;
-    sendBtn.disabled = !hasContent || isProcessing;
-  }
-
-  // Add a new message to the chat
-  function addMessage(content, sender) {
-    const messageElement = document.createElement("div");
-    messageElement.className = `message ${sender}`;
-    messageElement.style.position = "relative"; // For absolute positioning of copy button
-
-    const now = new Date();
-    const timeString = now.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    const header = document.createElement("div");
-    header.className = "message-header";
-    header.innerHTML = `
-      <span>${sender === "user" ? "You" : "AI Assistant"}</span>
-      <span class="message-time">${timeString}</span>
-    `;
-
-    messageElement.appendChild(header);
-
-    // Add copy button for all messages
-    const copyBtn = document.createElement("button");
-    copyBtn.className = `copy-message-btn ${sender}-copy-btn`;
-    copyBtn.title = "Copy message";
-    copyBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-    `;
-
-    copyBtn.addEventListener("click", () => {
-      navigator.clipboard
-        .writeText(content)
-        .then(() => {
-          const originalHTML = copyBtn.innerHTML;
-          copyBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-        `;
-          setTimeout(() => {
-            copyBtn.innerHTML = originalHTML;
-          }, 2000);
-        })
-        .catch((err) => {
-          console.error("Failed to copy message: ", err);
-        });
-    });
-
-    messageElement.appendChild(copyBtn);
-
-    // Process message content for code blocks
-    const contentWithCode = processMessageContent(content);
-    const contentContainer = document.createElement("div");
-    contentContainer.className = "message-content";
-    contentContainer.appendChild(contentWithCode);
-
-    messageElement.appendChild(contentContainer);
-    messagesDiv.appendChild(messageElement);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  }
-
-  // Process message content to handle code blocks
-  function processMessageContent(content) {
-    const container = document.createElement("div");
-
-    // Split content by code blocks
-    const parts = content.split(/(```[\s\S]*?```)/g);
-
-    parts.forEach((part) => {
-      if (part.startsWith("```") && part.endsWith("```")) {
-        // This is a code block
-        const codeContent = part.slice(3, -3).trim();
-        const firstNewLine = codeContent.indexOf("\n");
-
-        let language = "text";
-        let code = codeContent;
-
-        if (firstNewLine > 0) {
-          const potentialLang = codeContent.substring(0, firstNewLine).trim();
-          if (potentialLang && /^[a-zA-Z0-9_-]+$/.test(potentialLang)) {
-            language = potentialLang.toLowerCase();
-            code = codeContent.substring(firstNewLine).trim();
+  // Initialize the app
+  function init() {
+    // Initialize CodeMirror editor
+    editor = CodeMirror.fromTextArea(editorElement, {
+      mode: "markdown",
+      theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dracula' : 'default',
+      lineWrapping: true,
+      placeholder: 'Type your message here...',
+      autoCloseBrackets: true,
+      matchBrackets: true,
+      keyMap: "sublime",
+      viewportMargin: Infinity,
+      extraKeys: {
+        'Enter': (cm) => {
+          if (!cm.state.completionActive && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+          } else {
+             cm.execCommand("newlineAndIndent");
           }
-        }
-
-        // Create code block container
-        const codeBlock = document.createElement("div");
-        codeBlock.className = "code-block";
-
-        // Add code block header
-        const header = document.createElement("div");
-        header.className = "code-block-header";
-        header.innerHTML = `
-          <span>${language}</span>
-          <button class="copy-btn" title="Copy to clipboard">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            <span>Copy</span>
-          </button>
-        `;
-
-        // Add code content
-        const codeContentDiv = document.createElement("div");
-        codeContentDiv.className = "code-block-content";
-
-        const pre = document.createElement("pre");
-        const codeElement = document.createElement("code");
-
-        // Apply syntax highlighting if available
-        try {
-          const mode = CodeMirror.findModeByName(language) ||
-            CodeMirror.findModeByMIME(`text/${language}`) ||
-            CodeMirror.findModeByExtension(language) || { mime: "text/plain" };
-
-          CodeMirror.runMode(code, mode.mime, codeElement);
-        } catch (e) {
-          console.error("Error highlighting code:", e);
-          codeElement.textContent = code;
-        }
-
-        pre.appendChild(codeElement);
-        codeContentDiv.appendChild(pre);
-
-        // Add copy functionality
-        const copyBtn = header.querySelector(".copy-btn");
-        copyBtn.addEventListener("click", () => {
-          navigator.clipboard
-            .writeText(code)
-            .then(() => {
-              const originalHTML = copyBtn.innerHTML;
-              copyBtn.classList.add("copied");
-              copyBtn.innerHTML = `
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-              <span>Copied!</span>
-            `;
-              setTimeout(() => {
-                copyBtn.classList.remove("copied");
-                copyBtn.innerHTML = originalHTML;
-              }, 2000);
-            })
-            .catch((err) => {
-              console.error("Failed to copy text: ", err);
-            });
-        });
-
-        // Append elements
-        codeBlock.appendChild(header);
-        codeBlock.appendChild(codeContentDiv);
-        container.appendChild(codeBlock);
-      } else if (part.trim()) {
-        // Regular text content
-        const textElement = document.createElement("div");
-        // Convert newlines to <br> and handle markdown-style formatting
-        const formattedText = part
-          .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") // Bold
-          .replace(/\*(.*?)\*/g, "<em>$1</em>") // Italic
-          .replace(/`([^`]+)`/g, "<code>$1</code>") // Inline code
-          .replace(/\n/g, "<br>"); // New lines
-
-        textElement.innerHTML = formattedText;
-        container.appendChild(textElement);
+        },
+        'Ctrl-Enter': sendMessage,
+        'Cmd-Enter': sendMessage
       }
     });
 
-    return container;
-  }
-
-  // Show typing indicator
-  function showTyping() {
-    const typingElement = document.createElement("div");
-    typingElement.className = "typing";
-    typingElement.id = "typing-indicator";
-    typingElement.textContent = "AI is thinking";
-    messagesDiv.appendChild(typingElement);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  }
-
-  // Remove typing indicator
-  function removeTyping() {
-    const typingElement = document.getElementById("typing-indicator");
-    if (typingElement) {
-      typingElement.remove();
+    loadConversations();
+    setupEventListeners();
+    
+    // Create a default conversation if none exists
+    if (conversations.length === 0) {
+      createNewConversation();
+    } else {
+      // Load the most recent conversation that is not archived
+      const lastConversation = conversations.find(c => !c.isArchived) || conversations[0];
+      loadConversation(lastConversation.id);
     }
+    
+    // Set up theme
+    const savedTheme = localStorage.getItem("theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    setTheme(savedTheme);
+
+    setTimeout(() => editor.focus(), 100);
+  }
+
+  // Set up event listeners
+  function setupEventListeners() {
+    sidebarToggle?.addEventListener("click", () => appContainer.classList.toggle("sidebar-visible"));
+    newConversationBtn?.addEventListener("click", createNewConversation);
+    sendBtn?.addEventListener("click", sendMessage);
+    searchInput?.addEventListener("input", () => renderConversationList());
+    toggleArchivedBtn?.addEventListener("click", () => {
+        showArchived = !showArchived;
+        toggleArchivedBtn.setAttribute("data-active", showArchived);
+        const label = toggleArchivedBtn.querySelector("span");
+        if (label) label.textContent = showArchived ? "Hide archived" : "Show archived";
+        renderConversationList();
+    });
+    exportBtn?.addEventListener("click", exportCurrentConversation);
+    importBtn?.addEventListener("click", importConversation);
+
+    themeToggle?.addEventListener("click", () => {
+        const currentTheme = document.documentElement.getAttribute("data-theme");
+        setTheme(currentTheme === "dark" ? "light" : "dark");
+    });
+
+    editor.on('change', () => {
+        const wrapper = editor.getWrapperElement();
+        const scroller = editor.getScrollerElement();
+        if (scroller.scrollHeight > wrapper.clientHeight) {
+            wrapper.classList.add('has-scrollbar');
+        } else {
+            wrapper.classList.remove('has-scrollbar');
+        }
+        updateSendButtonState();
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener("click", (e) => {
+      if (window.innerWidth <= 768 && 
+          !e.target.closest(".conversation-sidebar") && 
+          !e.target.closest("#sidebar-toggle") &&
+          appContainer.classList.contains("sidebar-visible")) {
+        appContainer.classList.remove("sidebar-visible");
+      }
+    });
+  }
+
+  // Create a new conversation
+  function createNewConversation() {
+    const newId = Date.now().toString();
+    const newConversation = {
+      id: newId,
+      title: `New Conversation`,
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isArchived: false
+    };
+    conversations.unshift(newConversation);
+    saveConversations();
+    loadConversation(newId);
+    editor.focus();
+    return newConversation;
+  }
+
+  // Load a conversation by ID
+  function loadConversation(conversationId) {
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (!conversation) return;
+    
+    currentConversationId = conversationId;
+    localStorage.setItem('current_conversation_id', currentConversationId);
+    
+    renderMessages();
+    renderConversationList();
+    editor.focus();
+  }
+  
+  // Save/Load conversations to/from localStorage
+  function saveConversations() {
+    try {
+      localStorage.setItem('chat_conversations', JSON.stringify(conversations));
+    } catch (error) {
+      console.error('Error saving conversations:', error);
+      showNotification('Could not save conversations.', 'error');
+    }
+  }
+  
+  function loadConversations() {
+    try {
+      const saved = localStorage.getItem('chat_conversations');
+      conversations = saved ? JSON.parse(saved) : [];
+      conversations.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      currentConversationId = localStorage.getItem('current_conversation_id');
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+      conversations = [];
+    }
+  }
+
+  // Render the conversation list
+  function renderConversationList() {
+    if (!conversationList) return;
+    
+    const searchTerm = searchInput.value.trim().toLowerCase();
+    
+    const filtered = conversations.filter(conv => {
+      const matchesArchive = showArchived ? true : !conv.isArchived;
+      const title = String(conv.title || '').toLowerCase();
+      const content = (conv.messages || []).map(m => m.content).join(' ').toLowerCase();
+      const matchesSearch = searchTerm === '' || title.includes(searchTerm) || content.includes(searchTerm);
+      return matchesArchive && matchesSearch;
+    });
+
+    filtered.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    
+    const activeConversations = filtered.filter(c => !c.isArchived);
+    const archivedConversations = filtered.filter(c => c.isArchived);
+
+    let html = '';
+    if (activeConversations.length > 0) {
+        html += `<div class="conversation-group">
+            <div class="conversation-group-title">Active</div>
+            ${activeConversations.map(conv => renderConversationItem(conv)).join('')}
+        </div>`;
+    }
+    if (showArchived && archivedConversations.length > 0) {
+        html += `<div class="conversation-group">
+            <div class="conversation-group-title">Archived</div>
+            ${archivedConversations.map(conv => renderConversationItem(conv)).join('')}
+        </div>`;
+    }
+    
+    if (filtered.length === 0) {
+      html = `<div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        <p>${searchTerm ? 'No matching conversations' : 'No conversations yet'}</p>
+        <button id="create-first-convo" class="text-btn">Start a new chat</button>
+      </div>`;
+    }
+
+    conversationList.innerHTML = html;
+    
+    // Add event listeners after render
+    conversationList.querySelectorAll('.conversation-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const id = e.currentTarget.dataset.id;
+            if (e.target.closest('.archive-btn')) {
+                e.stopPropagation();
+                toggleArchiveConversation(id);
+            } else if (e.target.closest('.delete-btn')) {
+                e.stopPropagation();
+                deleteConversation(id);
+            } else {
+                loadConversation(id);
+                if (window.innerWidth <= 768) {
+                    appContainer.classList.remove("sidebar-visible");
+                }
+            }
+        });
+    });
+    const createFirstBtn = document.getElementById('create-first-convo');
+    createFirstBtn?.addEventListener('click', createNewConversation);
+  }
+  
+  function renderConversationItem(conv) {
+    const isActive = conv.id === currentConversationId;
+    const lastUpdated = new Date(conv.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const preview = (conv.messages[0]?.content || 'No messages yet').replace(/<[^>]*>?/gm, '').substring(0, 60);
+
+    return `
+      <div class="conversation-item ${isActive ? 'active' : ''}" data-id="${conv.id}" role="button" tabindex="0">
+        <div class="conversation-item-header">
+            <span class="conversation-title">${conv.title}</span>
+            <span class="conversation-time">${lastUpdated}</span>
+        </div>
+        <p class="conversation-preview">${preview}...</p>
+        <div class="conversation-actions">
+            <button class="icon-btn archive-btn" title="${conv.isArchived ? 'Unarchive' : 'Archive'}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"></path><path d="M1 3h22v5H1z"></path><path d="M10 12h4"></path></svg>
+            </button>
+            <button class="icon-btn delete-btn" title="Delete">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+        </div>
+      </div>`;
+  }
+  
+  // Render messages for the current conversation
+  function renderMessages() {
+    const conversation = conversations.find(c => c.id === currentConversationId);
+    
+    // Clear messages container first
+    messagesContainer.innerHTML = '';
+    
+    if (!conversation || conversation.messages.length === 0) {
+        // Don't show any welcome message when no conversation is started
+        currentConversationTitle.textContent = 'New Chat';
+        return;
+    }
+    
+    // Only show messages if we have an active conversation with messages
+    currentConversationTitle.textContent = conversation.title;
+
+    conversation.messages.forEach(message => {
+        if (!message.content) return; // Skip empty messages
+        
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${message.role}`;
+        if (message.isError) messageElement.classList.add('error');
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        
+        // Ensure message content is a string and format it
+        const messageContent = String(message.content || '');
+        const formattedContent = messageContent
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\n/g, '<br>');
+            
+        contentDiv.innerHTML = formattedContent;
+        
+        const timeDiv = document.createElement('div');
+        timeDiv.className = 'message-time';
+        timeDiv.textContent = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        messageElement.appendChild(contentDiv);
+        messageElement.appendChild(timeDiv);
+        messagesContainer.appendChild(messageElement);
+    });
+    
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+  
+  // Conversation actions
+  function toggleArchiveConversation(id) {
+    const conv = conversations.find(c => c.id === id);
+    if (conv) {
+      conv.isArchived = !conv.isArchived;
+      conv.updatedAt = new Date().toISOString();
+      saveConversations();
+      renderConversationList();
+      showNotification(`Conversation ${conv.isArchived ? 'archived' : 'unarchived'}.`);
+    }
+  }
+  
+  function deleteConversation(id) {
+    if (!confirm('Are you sure you want to permanently delete this conversation?')) return;
+    
+    conversations = conversations.filter(c => c.id !== id);
+    
+    if (id === currentConversationId) {
+        const nextConv = conversations.find(c => !c.isArchived) || conversations[0];
+        if (nextConv) {
+            loadConversation(nextConv.id);
+        } else {
+            createNewConversation();
+        }
+    }
+    
+    saveConversations();
+    renderConversationList();
+  }
+
+  function addMessageToCurrentConversation(message) {
+    const conversation = conversations.find(c => c.id === currentConversationId);
+    if (!conversation) return;
+    
+    conversation.messages.push(message);
+    conversation.updatedAt = new Date().toISOString();
+    
+    if (conversation.messages.length === 1 && conversation.title === 'New Conversation') {
+        const title = message.content.substring(0, 40);
+        conversation.title = title.length < 40 ? title : `${title}...`;
+    }
+    
+    conversations.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+    saveConversations();
+    renderMessages();
+    renderConversationList();
   }
 
   // Send message to AI
   async function sendMessage() {
-    const message = editor.getValue().trim();
-    if (!message || isProcessing) return;
-
-    // Add user message to chat
-    addMessage(message, "user");
-    conversation.push({ role: "user", content: message });
-
-    // Clear input and update state
-    editor.setValue("");
-    updateSendButtonState();
+    if (!editor || !currentConversationId) return;
+    
+    const content = editor.getValue().trim();
+    if (!content || isProcessing) return;
+    
+    const userMessage = { role: 'user', content, timestamp: new Date().toISOString() };
+    addMessageToCurrentConversation(userMessage);
+    
+    editor.setValue('');
+    editor.focus();
     isProcessing = true;
-    sendBtn.disabled = true;
-
-    // Show typing indicator
-    showTyping();
-
+    updateSendButtonState();
+    showTypingIndicator();
+    
     try {
-      // Send to AI
-      const response = await puter.ai.chat(conversation);
-
-      // Remove typing indicator
-      removeTyping();
-
-      if (response && response.message && response.message.content) {
-        // Add AI response to chat
-        addMessage(response.message.content, "ai");
-        conversation.push(response.message);
-      } else {
-        throw new Error("Invalid response format from AI");
+      const conversation = conversations.find(c => c.id === currentConversationId);
+      if (!conversation) throw new Error("Conversation not found.");
+      
+      // Prepare messages for the API
+      const recentMessages = conversation.messages
+        .slice(-10)
+        .map(({ role, content }) => ({ role, content }));
+      
+      // Make sure puter object is available
+      if (typeof puter === 'undefined' || !puter.ai || !puter.ai.chat) {
+        throw new Error('AI service is not available. Make sure puter.js is properly loaded.');
       }
+      
+      // Call the AI service
+      const response = await puter.ai.chat({
+        messages: recentMessages,
+        model: 'gpt-3.5-turbo' // Specify the model if required
+      });
+      
+      // Handle the response
+      let responseContent;
+      if (response && response.choices && response.choices.length > 0) {
+        responseContent = response.choices[0].message.content;
+      } else if (response && response.message) {
+        responseContent = response.message;
+      } else {
+        throw new Error('Unexpected response format from AI service');
+      }
+      
+      const assistantMessage = {
+        role: 'assistant',
+        content: responseContent,
+        timestamp: new Date().toISOString()
+      };
+      addMessageToCurrentConversation(assistantMessage);
+      
     } catch (error) {
-      console.error("Error:", error);
-      removeTyping();
-      addMessage("Sorry, I encountered an error. Please try again.", "ai");
+      console.error('Error getting AI response:', error);
+      const errorMessage = {
+        role: 'assistant',
+        content: `Error: ${error.message || 'Failed to get response from AI service'}`,
+        timestamp: new Date().toISOString(),
+        isError: true
+      };
+      addMessageToCurrentConversation(errorMessage);
     } finally {
+      hideTypingIndicator();
       isProcessing = false;
       updateSendButtonState();
     }
   }
 
-  // Update theme icons
-  function updateIcons(theme) {
-    if (theme === "dark") {
-      sunIcon.style.display = "block";
-      moonIcon.style.display = "none";
-    } else {
-      sunIcon.style.display = "none";
-      moonIcon.style.display = "block";
-    }
+  // UI Helpers
+  function updateSendButtonState() {
+    const hasContent = editor && editor.getValue().trim().length > 0;
+    sendBtn.disabled = !hasContent || isProcessing;
+  }
+  
+  function showTypingIndicator() {
+    const indicator = document.createElement('div');
+    indicator.id = 'typing-indicator';
+    indicator.className = 'typing-indicator';
+    indicator.innerHTML = `<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>`;
+    messagesContainer.appendChild(indicator);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+  
+  function hideTypingIndicator() {
+    document.getElementById('typing-indicator')?.remove();
   }
 
-  // Initialize
-  updateSendButtonState();
-  editor.focus();
-});
+  function setTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+    editor.setOption("theme", theme === 'dark' ? 'dracula' : 'default');
+    sunIcon.style.display = theme === 'dark' ? 'block' : 'none';
+    moonIcon.style.display = theme === 'dark' ? 'none' : 'block';
+  }
+
+  function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `toast ${type}`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    setTimeout(() => {
+        notification.classList.add('visible');
+    }, 10);
+    setTimeout(() => {
+        notification.classList.remove('visible');
+        notification.addEventListener('transitionend', () => notification.remove());
+    }, 3000);
+  }
+
+  // Import / Export
+  function exportCurrentConversation() {
+    const conversation = conversations.find(c => c.id === currentConversationId);
+    if (!conversation) return showNotification('No active conversation to export.', 'error');
+    
+    const dataStr = JSON.stringify(conversation, null, 2);
+    const blob = new Blob([dataStr], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.download = `conversation-${conversation.id}.json`;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+  
+  function importConversation() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const importedConv = JSON.parse(e.target.result);
+          if (!importedConv.id || !importedConv.messages || !Array.isArray(importedConv.messages)) {
+            throw new Error('Invalid conversation format');
+          }
+          
+          const newId = Date.now().toString();
+          const newConversation = { ...importedConv, id: newId, isArchived: false };
+          
+          conversations.unshift(newConversation);
+          saveConversations();
+          loadConversation(newId);
+          showNotification('Conversation imported successfully!', 'success');
+        } catch (error) {
+          console.error('Error importing conversation:', error);
+          showNotification('Failed to import file.', 'error');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+  
+  // Public API
+  return { init };
+})();
+
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', ChatApp.init);
