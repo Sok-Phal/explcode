@@ -25,8 +25,43 @@ const ChatApp = (() => {
   let showArchived = false;
   let editor;
 
+  // Initialize Puter JS
+  async function initializePuter() {
+    return new Promise((resolve) => {
+      const checkPuter = () => {
+        if (typeof puter !== 'undefined' && puter.ai) {
+          console.log('Puter JS is ready');
+          // If Puter requires initialization with an API key, you can do it here:
+          // await puter.init({ apiKey: 'your-api-key' });
+          resolve(true);
+        } else {
+          console.log('Waiting for Puter JS to load...');
+          setTimeout(checkPuter, 100);
+        }
+      };
+      
+      // Start checking
+      checkPuter();
+      
+      // Set a timeout in case Puter JS fails to load
+      setTimeout(() => {
+        if (typeof puter === 'undefined') {
+          console.error('Puter JS failed to load after 5 seconds');
+          showNotification('Failed to load AI service. Please check your internet connection and refresh the page.', 'error');
+          resolve(false);
+        }
+      }, 5000);
+    });
+  }
+
   // Initialize the app
-  function init() {
+  async function init() {
+    // Initialize Puter JS
+    const puterInitialized = await initializePuter();
+    if (!puterInitialized) {
+      return;
+    }
+    
     // Initialize CodeMirror editor
     editor = CodeMirror.fromTextArea(editorElement, {
       mode: "markdown",
@@ -336,90 +371,156 @@ const ChatApp = (() => {
   }
 
   function addMessageToCurrentConversation(message) {
-    const conversation = conversations.find(c => c.id === currentConversationId);
-    if (!conversation) return;
-    
-    conversation.messages.push(message);
-    conversation.updatedAt = new Date().toISOString();
-    
-    if (conversation.messages.length === 1 && conversation.title === 'New Conversation') {
-        const title = message.content.substring(0, 40);
-        conversation.title = title.length < 40 ? title : `${title}...`;
+    try {
+      // Validate input
+      if (!message || typeof message !== 'object') {
+        console.error('Invalid message format:', message);
+        return;
+      }
+      
+      // Ensure required fields exist and are properly formatted
+      const validMessage = {
+        role: String(message.role || 'user'),
+        content: String(message.content || ''),
+        timestamp: message.timestamp || new Date().toISOString(),
+        ...(message.isError && { isError: true })
+      };
+      
+      // Find the current conversation
+      const conversation = conversations.find(c => c.id === currentConversationId);
+      if (!conversation) {
+        console.error('No active conversation found');
+        return;
+      }
+      
+      // Ensure conversation.messages is a valid array
+      if (!Array.isArray(conversation.messages)) {
+        conversation.messages = [];
+      }
+      
+      // Add the message
+      conversation.messages.push(validMessage);
+      
+      // Update conversation metadata
+      conversation.updatedAt = new Date().toISOString();
+      
+      // Update the conversation title if it's the first message
+      if (conversation.messages.length === 1 && validMessage.content) {
+        const title = validMessage.content
+          .replace(/[^\w\s]/gi, '') // Remove special characters
+          .trim()
+          .split('\n')[0] // Take first line
+          .slice(0, 30) // Limit length
+          .trim();
+        conversation.title = title || 'New Conversation';
+      }
+      
+      // Sort conversations by updated time
+      conversations.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      
+      // Save and update UI
+      saveConversations();
+      renderMessages();
+      renderConversationList();
+      
+      // Auto-scroll to bottom of messages
+      setTimeout(() => {
+        if (messagesContainer) {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+      }, 0);
+      
+    } catch (error) {
+      console.error('Error in addMessageToCurrentConversation:', error);
+      showNotification('Failed to add message to conversation', 'error');
     }
-    
-    conversations.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-
-    saveConversations();
-    renderMessages();
-    renderConversationList();
   }
 
   // Send message to AI
   async function sendMessage() {
-    if (!editor || !currentConversationId) return;
-    
     const content = editor.getValue().trim();
     if (!content || isProcessing) return;
+
+    // Add user message to chat
+    const userMessage = { 
+      role: 'user', 
+      content: content,
+      timestamp: new Date().toISOString()
+    };
     
-    const userMessage = { role: 'user', content, timestamp: new Date().toISOString() };
+    // Add to conversation
     addMessageToCurrentConversation(userMessage);
     
-    editor.setValue('');
+    // Clear input and update state
+    editor.setValue("");
     editor.focus();
     isProcessing = true;
     updateSendButtonState();
+
+    // Show typing indicator
     showTypingIndicator();
-    
+
     try {
+      // Get the current conversation
       const conversation = conversations.find(c => c.id === currentConversationId);
-      if (!conversation) throw new Error("Conversation not found.");
-      
-      // Prepare messages for the API
+      if (!conversation) {
+        throw new Error("Conversation not found");
+      }
+
+      // Prepare messages for the API (last 10 messages)
       const recentMessages = conversation.messages
+        .filter(msg => msg && typeof msg === 'object' && 'role' in msg && 'content' in msg)
         .slice(-10)
         .map(({ role, content }) => ({ role, content }));
-      
-      // Make sure puter object is available
-      if (typeof puter === 'undefined' || !puter.ai || !puter.ai.chat) {
-        throw new Error('AI service is not available. Make sure puter.js is properly loaded.');
-      }
-      
-      // Call the AI service
-      const response = await puter.ai.chat({
-        messages: recentMessages,
-        model: 'gpt-3.5-turbo' // Specify the model if required
-      });
-      
-      // Handle the response
-      let responseContent;
-      if (response && response.choices && response.choices.length > 0) {
-        responseContent = response.choices[0].message.content;
-      } else if (response && response.message) {
-        responseContent = response.message;
+
+      console.log("Sending to Puter AI:", recentMessages);
+
+      // Send to AI - using the simpler approach from the working example
+      const response = await puter.ai.chat(recentMessages);
+
+      console.log("Received from Puter AI:", response);
+
+      // Process the response
+      if (response && response.message && response.message.content) {
+        // Add AI response to conversation
+        const assistantMessage = {
+          role: 'assistant',
+          content: response.message.content,
+          timestamp: new Date().toISOString()
+        };
+        
+        addMessageToCurrentConversation(assistantMessage);
       } else {
-        throw new Error('Unexpected response format from AI service');
+        throw new Error("Invalid response format from AI");
       }
-      
-      const assistantMessage = {
-        role: 'assistant',
-        content: responseContent,
-        timestamp: new Date().toISOString()
-      };
-      addMessageToCurrentConversation(assistantMessage);
       
     } catch (error) {
-      console.error('Error getting AI response:', error);
-      const errorMessage = {
+      console.error('Error in sendMessage:', error);
+      
+      // Simplified error handling similar to the working example
+      const errorMessage = error.message || 'An error occurred. Please try again.';
+      
+      // Add error message to chat
+      const errorResponse = {
         role: 'assistant',
-        content: `Error: ${error.message || 'Failed to get response from AI service'}`,
+        content: `Error: ${errorMessage}`,
         timestamp: new Date().toISOString(),
         isError: true
       };
-      addMessageToCurrentConversation(errorMessage);
+      
+      addMessageToCurrentConversation(errorResponse);
+      showNotification(errorMessage, 'error');
+      
     } finally {
+      // Clean up
       hideTypingIndicator();
       isProcessing = false;
       updateSendButtonState();
+      
+      // Auto-scroll to bottom of messages
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
     }
   }
 
