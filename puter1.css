@@ -383,11 +383,51 @@
     color: white;
   }
 
+  .message-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  .copy-message-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 4px;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+  }
+
+  .message:hover .copy-message-btn {
+    opacity: 1;
+  }
+
+  .copy-message-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text);
+  }
+
+  .copy-message-btn.copied {
+    color: var(--primary);
+    opacity: 1;
+  }
+
+  .copy-message-btn.copied svg {
+    stroke: var(--primary);
+  }
+
   .message-time {
     font-size: 0.75rem;
     color: var(--text-muted);
-    margin-left: auto;
-    padding-left: 0.5rem;
+    min-width: 2.5rem;
+    text-align: right;
   }
 
   /* Message content */

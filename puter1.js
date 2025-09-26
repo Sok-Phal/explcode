@@ -529,12 +529,21 @@ const ChatApp = (() => {
         minute: '2-digit' 
       });
       
+      // Add copy button to header
       headerDiv.innerHTML = `
         <div class="message-role">
           <span class="role-icon">${roleIcon}</span>
           <span class="role-text">${roleText}</span>
         </div>
-        <span class="message-time">${timestamp}</span>
+        <div class="message-actions">
+          <button class="copy-message-btn" title="Copy message">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <span class="message-time">${timestamp}</span>
+        </div>
       `;
       
       // Create message content container
@@ -545,6 +554,9 @@ const ChatApp = (() => {
       const messageContent = String(message.content || '');
       const processedContent = processMarkdownContent(messageContent);
       contentDiv.appendChild(processedContent);
+      
+      // Store the raw message content in a data attribute for easy copying
+      messageElement.dataset.messageContent = messageContent.replace(/<[^>]*>?/gm, '');
       
       // Assemble the message
       messageElement.appendChild(headerDiv);
@@ -559,6 +571,41 @@ const ChatApp = (() => {
     
     // Setup copy buttons
     setupCodeCopyButtons();
+    
+    // Add event listeners for message copy buttons
+    document.querySelectorAll('.copy-message-btn').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const messageElement = button.closest('.message');
+        const messageContent = messageElement.dataset.messageContent;
+        
+        if (messageContent) {
+          try {
+            await navigator.clipboard.writeText(messageContent);
+            
+            // Visual feedback
+            button.classList.add('copied');
+            const originalHTML = button.innerHTML;
+            button.innerHTML = `
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            `;
+            
+            // Reset button after delay
+            setTimeout(() => {
+              button.classList.remove('copied');
+              button.innerHTML = originalHTML;
+            }, 2000);
+            
+            showNotification('Message copied to clipboard!');
+          } catch (err) {
+            console.error('Failed to copy message:', err);
+            showNotification('Failed to copy message', 'error');
+          }
+        }
+      });
+    });
     
     // Scroll to bottom
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
