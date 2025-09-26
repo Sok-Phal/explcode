@@ -289,6 +289,202 @@ const ChatApp = (() => {
       </div>`;
   }
   
+  // Process message content to handle code blocks
+  function processMarkdownContent(content) {
+    const container = document.createElement('div');
+    
+    // Split content by code blocks
+    const parts = content.split(/(```[\s\S]*?```)/g);
+    
+    parts.forEach((part) => {
+      if (part.startsWith('```') && part.endsWith('```')) {
+        // This is a code block
+        const codeContent = part.slice(3, -3).trim();
+        const firstNewLine = codeContent.indexOf('\n');
+        
+        let language = 'text';
+        let code = codeContent;
+        
+        if (firstNewLine > 0) {
+          const potentialLang = codeContent.substring(0, firstNewLine).trim();
+          if (potentialLang && /^[a-zA-Z0-9_-]+$/.test(potentialLang)) {
+            language = potentialLang.toLowerCase();
+            code = codeContent.substring(firstNewLine).trim();
+          }
+        }
+        
+        // Create code block container
+        const codeBlock = document.createElement('div');
+        codeBlock.className = 'code-block';
+        
+        // Add code block header
+        const header = document.createElement('div');
+        header.className = 'code-block-header';
+        header.innerHTML = `
+          <span>${language}</span>
+          <button class="copy-btn" title="Copy to clipboard">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>Copy</span>
+          </button>
+        `;
+        
+        // Add code content
+        const codeContentDiv = document.createElement('div');
+        codeContentDiv.className = 'code-block-content';
+        
+        const pre = document.createElement('pre');
+        const codeElement = document.createElement('code');
+        
+        // Apply syntax highlighting if available
+        try {
+          const mode = CodeMirror.findModeByName(language) || 
+                      CodeMirror.findModeByMIME(`text/${language}`) || 
+                      CodeMirror.findModeByExtension(language) || 
+                      { mime: 'text/plain' };
+          
+          CodeMirror.runMode(code, mode.mime, codeElement);
+        } catch (e) {
+          console.error('Error highlighting code:', e);
+          codeElement.textContent = code;
+        }
+        
+        pre.appendChild(codeElement);
+        codeContentDiv.appendChild(pre);
+        
+        // Add copy functionality
+        const copyBtn = header.querySelector('.copy-btn');
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(code)
+            .then(() => {
+              const originalHTML = copyBtn.innerHTML;
+              copyBtn.classList.add('copied');
+              copyBtn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span>Copied!</span>
+              `;
+              setTimeout(() => {
+                copyBtn.classList.remove('copied');
+                copyBtn.innerHTML = originalHTML;
+              }, 2000);
+            })
+            .catch((err) => {
+              console.error('Failed to copy text: ', err);
+              showNotification('Failed to copy code', 'error');
+            });
+        });
+        
+        // Append elements
+        codeBlock.appendChild(header);
+        codeBlock.appendChild(codeContentDiv);
+        container.appendChild(codeBlock);
+      } else if (part.trim()) {
+        // Regular text content
+        const textElement = document.createElement('div');
+        // Convert newlines to <br> and handle markdown-style formatting
+        const formattedText = part
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+          .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
+          .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>') // Inline code
+          .replace(/\n/g, '<br>'); // New lines
+        
+        textElement.innerHTML = formattedText;
+        container.appendChild(textElement);
+      }
+    });
+    
+    return container;
+  }
+
+  // Initialize CodeMirror for a code block
+  function initializeCodeBlock(container) {
+    const codeContent = container.querySelector('.code-content');
+    const lang = container.querySelector('.code-language').textContent;
+    
+    // Get the actual code content
+    const code = codeContent.textContent;
+    
+    // Clear the container
+    codeContent.textContent = '';
+    
+    // Initialize CodeMirror
+    const editor = CodeMirror(codeContent, {
+      value: code,
+      mode: lang,
+      theme: 'dracula',
+      lineNumbers: true,
+      readOnly: true,
+      lineWrapping: true,
+      viewportMargin: Infinity
+    });
+    
+    // Set height based on content
+    const lineCount = editor.lineCount();
+    const lineHeight = editor.defaultTextHeight();
+    const padding = 10; // Add some padding
+    editor.setSize(null, (lineCount * lineHeight) + (2 * padding));
+  }
+
+  // Add copy functionality with improved feedback
+  function setupCodeCopyButtons() {
+    document.querySelectorAll('.code-block').forEach(block => {
+      const copyButton = block.querySelector('.copy-code');
+      const codeContent = block.querySelector('.code-content');
+      
+      // Create and add copy icon SVG
+      const copyIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      copyIcon.setAttribute('viewBox', '0 0 24 24');
+      copyIcon.setAttribute('fill', 'none');
+      copyIcon.setAttribute('stroke', 'currentColor');
+      copyIcon.setAttribute('stroke-width', '2');
+      copyIcon.setAttribute('stroke-linecap', 'round');
+      copyIcon.setAttribute('stroke-linejoin', 'round');
+      copyIcon.innerHTML = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>';
+      copyButton.prepend(copyIcon);
+      
+      copyButton.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const code = codeContent.textContent;
+        
+        try {
+          await navigator.clipboard.writeText(code);
+          
+          // Visual feedback
+          copyButton.classList.add('copied');
+          copyIcon.innerHTML = '<path d="M20 6L9 17l-5-5"></path>';
+          
+          // Reset after delay
+          setTimeout(() => {
+            copyButton.classList.remove('copied');
+            copyIcon.innerHTML = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>';
+          }, 2000);
+          
+          // Show a small toast notification
+          showNotification('Code copied to clipboard!', 'success');
+          
+        } catch (err) {
+          console.error('Failed to copy text: ', err);
+          showNotification('Failed to copy code', 'error');
+        }
+      });
+      
+      // Add hover effect to the entire code block
+      block.addEventListener('mouseenter', () => {
+        copyButton.style.opacity = '1';
+      });
+      
+      block.addEventListener('mouseleave', () => {
+        if (!copyButton.classList.contains('copied')) {
+          copyButton.style.opacity = '0.7';
+        }
+      });
+    });
+  }
+
   // Render messages for the current conversation
   function renderMessages() {
     const conversation = conversations.find(c => c.id === currentConversationId);
@@ -297,46 +493,74 @@ const ChatApp = (() => {
     messagesContainer.innerHTML = '';
     
     if (!conversation || conversation.messages.length === 0) {
-        // Don't show any welcome message when no conversation is started
-        currentConversationTitle.textContent = 'New Chat';
-        return;
+      currentConversationTitle.textContent = 'New Chat';
+      return;
     }
     
-    // Only show messages if we have an active conversation with messages
     currentConversationTitle.textContent = conversation.title;
 
     conversation.messages.forEach(message => {
-        if (!message.content) return; // Skip empty messages
-        
-        const messageElement = document.createElement('div');
-        messageElement.className = `message ${message.role}`;
-        if (message.isError) messageElement.classList.add('error');
+      if (!message.content) return; // Skip empty messages
+      
+      const messageElement = document.createElement('div');
+      messageElement.className = `message ${message.role}`;
+      if (message.isError) messageElement.classList.add('error');
 
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'message-content';
-        
-        // Ensure message content is a string and format it
-        const messageContent = String(message.content || '');
-        const formattedContent = messageContent
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\n/g, '<br>');
-            
-        contentDiv.innerHTML = formattedContent;
-        
-        const timeDiv = document.createElement('div');
-        timeDiv.className = 'message-time';
-        timeDiv.textContent = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        messageElement.appendChild(contentDiv);
-        messageElement.appendChild(timeDiv);
-        messagesContainer.appendChild(messageElement);
+      // Create message header
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'message-header';
+      
+      // Add role icon based on message role
+      let roleIcon = '';
+      let roleText = message.role === 'user' ? 'You' : 'Assistant';
+      
+      if (message.role === 'user') {
+        roleIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
+      } else if (message.role === 'assistant') {
+        roleIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>';
+      } else if (message.role === 'system') {
+        roleText = 'System';
+        roleIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
+      }
+      
+      // Add timestamp
+      const timestamp = new Date(message.timestamp).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      
+      headerDiv.innerHTML = `
+        <div class="message-role">
+          <span class="role-icon">${roleIcon}</span>
+          <span class="role-text">${roleText}</span>
+        </div>
+        <span class="message-time">${timestamp}</span>
+      `;
+      
+      // Create message content container
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+      
+      // Process message content with markdown and code blocks
+      const messageContent = String(message.content || '');
+      const processedContent = processMarkdownContent(messageContent);
+      contentDiv.appendChild(processedContent);
+      
+      // Assemble the message
+      messageElement.appendChild(headerDiv);
+      messageElement.appendChild(contentDiv);
+      messagesContainer.appendChild(messageElement);
     });
     
+    // Initialize CodeMirror for all code blocks
+    document.querySelectorAll('.code-block').forEach(block => {
+      initializeCodeBlock(block);
+    });
+    
+    // Setup copy buttons
+    setupCodeCopyButtons();
+    
+    // Scroll to bottom
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
   

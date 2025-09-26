@@ -321,40 +321,88 @@
     max-width: 80%;
     width: fit-content;
     padding: 0.75rem 1rem;
-    border-radius: 1rem;
+    border-radius: var(--radius);
     line-height: 1.6;
+    background-color: var(--bg-secondary);
+    box-shadow: var(--shadow-sm);
+    margin: 0.5rem 0;
+    transition: all 0.2s ease;
   }
+
   .message.user {
     align-self: flex-end;
-    background: var(--primary);
-    color: white;
+    background: var(--primary-light);
+    color: var(--text);
     border-bottom-right-radius: 0.25rem;
   }
+
   .message.assistant {
     align-self: flex-start;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
     border-bottom-left-radius: 0.25rem;
   }
+
   .message.error {
-      background-color: var(--error);
-      color: white;
-      border: none;
+    background-color: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid var(--error);
   }
+
+  /* Message header */
+  .message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .message-role {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text);
+  }
+
+  .role-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background-color: var(--primary-light);
+    color: var(--primary);
+    flex-shrink: 0;
+  }
+
+  .message.user .role-icon {
+    background-color: var(--primary);
+    color: white;
+  }
+
   .message-time {
-    font-size: 0.7rem;
-    margin-top: 0.5rem;
-    opacity: 0.7;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: auto;
+    padding-left: 0.5rem;
   }
-  
-  .typing-indicator {
-      display: flex;
-      gap: 0.25rem;
-      align-self: flex-start;
-      padding: 0.75rem 1rem;
-      background-color: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 1rem;
+
+  /* Message content */
+  .message-content {
+    line-height: 1.6;
+    word-wrap: break-word;
+    overflow-x: auto;
+  }
+
+  .message-content p:first-child {
+    margin-top: 0;
+  }
+
+  .message-content p:last-child {
+    margin-bottom: 0;
   }
   .typing-dot {
       width: 8px;
@@ -465,3 +513,144 @@
     transform: translateX(-50%) translateY(-10px);
   }
   .toast.error { background: var(--error); color: white; }
+
+  /* ==========================================================================
+     CODE BLOCKS & SYNTAX HIGHLIGHTING
+     ========================================================================== */
+  .message-content pre {
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+
+  .code-block {
+    margin: 1.25rem 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .code-block-header span {
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+    text-transform: lowercase;
+    color: var(--text-muted);
+  }
+
+  .code-block-content {
+    padding: 1rem;
+    overflow-x: auto;
+  }
+
+  .code-block pre {
+    margin: 0;
+    padding: 0;
+    background: none;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  .code-block code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    line-height: 1.6;
+    white-space: pre;
+    display: block;
+  }
+
+  .copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .copy-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text);
+    border-color: var(--border-hover);
+  }
+
+  .copy-btn.copied {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+  }
+
+  .copy-btn svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
+  }
+
+  .copy-btn.copied svg {
+    stroke: white;
+  }
+
+  /* Inline code */
+  .message-content code:not(.code-block code) {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 0.2em 0.4em;
+    margin: 0 0.1em;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  /* Make sure code blocks don't overflow */
+  .message-content {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* Syntax highlighting overrides */
+  .cm-s-default .cm-keyword { color: #c678dd; }
+  .cm-s-default .cm-atom { color: #d19a66; }
+  .cm-s-default .cm-number { color: #d19a66; }
+  .cm-s-default .cm-def { color: #61afef; }
+  .cm-s-default .cm-variable { color: #e06c75; }
+  .cm-s-default .cm-variable-2 { color: #e06c75; }
+  .cm-s-default .cm-variable-3 { color: #e06c75; }
+  .cm-s-default .cm-property { color: #e06c75; }
+  .cm-s-default .cm-operator { color: #56b6c2; }
+  .cm-s-default .cm-comment { color: #5c6370; font-style: italic; }
+  .cm-s-default .cm-string { color: #98c379; }
+  .cm-s-default .cm-string-2 { color: #98c379; }
+  .cm-s-default .cm-meta { color: #d19a66; }
+  .cm-s-default .cm-builtin { color: #e6c07b; }
+  .cm-s-default .cm-tag { color: #e06c75; }
+  .cm-s-default .cm-attribute { color: #d19a66; }
+  .cm-s-default .cm-header { color: #e06c75; }
+  .cm-s-default .cm-hr { color: #abb2bf; }
+  .cm-s-default .cm-link { color: #61afef; text-decoration: none; }
+  .cm-s-default .cm-error { color: #f44747; }
