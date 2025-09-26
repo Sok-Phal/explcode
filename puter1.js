@@ -116,9 +116,19 @@ const ChatApp = (() => {
     if (conversations.length === 0) {
       createNewConversation();
     } else {
-      // Load the most recent conversation that is not archived
-      const lastConversation = conversations.find(c => !c.isArchived) || conversations[0];
-      loadConversation(lastConversation.id);
+      // Try to load the last active conversation, or the most recent one
+      const savedConversationId = localStorage.getItem('current_conversation_id');
+      const lastActiveConversation = conversations.find(c => c.id === savedConversationId);
+      const lastConversation = lastActiveConversation || 
+                             conversations.find(c => !c.isArchived) || 
+                             conversations[0];
+      
+      if (lastConversation) {
+        // Use a small timeout to ensure the DOM is ready
+        setTimeout(() => {
+          loadConversation(lastConversation.id);
+        }, 0);
+      }
     }
     
     // Set up theme
@@ -195,12 +205,42 @@ const ChatApp = (() => {
     const conversation = conversations.find(c => c.id === conversationId);
     if (!conversation) return;
     
+    // Store the conversation ID first
     currentConversationId = conversationId;
     localStorage.setItem('current_conversation_id', currentConversationId);
     
+    // Update the UI to reflect the active conversation
+    updateActiveConversationUI(conversationId);
+    
+    // Render messages and update the conversation list
     renderMessages();
     renderConversationList();
-    editor.focus();
+    
+    // Focus the editor if it exists
+    if (editor) {
+      editor.focus();
+    }
+  }
+  
+  // Helper function to update the active conversation UI
+  function updateActiveConversationUI(conversationId) {
+    // Safely remove active class from all conversation items
+    const allItems = document.querySelectorAll('.conversation-item');
+    if (allItems && allItems.length > 0) {
+      allItems.forEach(item => {
+        if (item && item.classList) {
+          item.classList.remove('active-conversation');
+        }
+      });
+      
+      // Add active class to selected conversation if it exists in the DOM
+      const selectedItem = document.querySelector(`.conversation-item[data-id="${conversationId}"]`);
+      if (selectedItem) {
+        selectedItem.classList.add('active-conversation');
+        // Smoothly scroll the active item into view if needed
+        selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
   }
   
   // Save/Load conversations to/from localStorage
@@ -296,7 +336,7 @@ const ChatApp = (() => {
     const preview = (conv.messages[0]?.content || 'No messages yet').replace(/<[^>]*>?/gm, '').substring(0, 60);
 
     return `
-      <div class="conversation-item ${isActive ? 'active' : ''}" data-id="${conv.id}" role="button" tabindex="0">
+      <div class="conversation-item ${isActive ? 'active-conversation' : ''}" data-id="${conv.id}" role="button" tabindex="0">
         <div class="conversation-item-header">
             <span class="conversation-title">${conv.title}</span>
             <span class="conversation-time">${lastUpdated}</span>

@@ -243,10 +243,35 @@
     flex-direction: column;
     padding: 0.6rem 0.75rem;
     border-radius: var(--radius);
-    margin-bottom: 0.25rem;
+    margin: 0.25rem 0.25rem 0.25rem 0;
     cursor: pointer;
     transition: var(--transition);
     position: relative;
+    background: transparent;
+  }
+  
+  /* Hover state */
+  .conversation-item:hover {
+    background: var(--bg-tertiary);
+  }
+  
+  /* Active conversation state */
+  .conversation-item.active-conversation {
+    background: var(--primary-light);
+    border-left: 3px solid var(--primary);
+    padding-left: calc(0.75rem - 3px);
+    font-weight: 500;
+    color: var(--primary);
+  }
+  
+  /* Subtle animation when becoming active */
+  .conversation-item.active-conversation {
+    animation: highlight-fade 0.3s ease-out;
+  }
+  
+  @keyframes highlight-fade {
+    from { background-color: var(--primary-light); }
+    to { background-color: var(--primary-light); }
   }
   .conversation-item:hover { background: var(--bg-tertiary); }
   .conversation-item.active { background: var(--primary-light); color: var(--primary); }
