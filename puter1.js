@@ -16,6 +16,7 @@ const ChatApp = (() => {
   const exportBtn = document.getElementById("export-btn");
   const importBtn = document.getElementById("import-btn");
   const currentConversationTitle = document.getElementById("current-conversation-title");
+  const editTitleBtn = document.getElementById("edit-title-btn");
 
 
   // State
@@ -138,8 +139,56 @@ const ChatApp = (() => {
     setTimeout(() => editor.focus(), 100);
   }
 
+  // Update conversation title
+  function updateConversationTitle() {
+    if (!currentConversationId) return;
+    
+    const newTitle = currentConversationTitle.textContent.trim() || 'Untitled';
+    const conversation = conversations.find(c => c.id === currentConversationId);
+    
+    if (conversation && conversation.title !== newTitle) {
+      conversation.title = newTitle;
+      conversation.updatedAt = new Date().toISOString();
+      saveConversations();
+      renderConversationList();
+    }
+    
+    // Ensure the title is not empty
+    currentConversationTitle.textContent = newTitle;
+  }
+
   // Set up event listeners
   function setupEventListeners() {
+    // Title editing
+    currentConversationTitle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        currentConversationTitle.blur();
+      } else if (e.key === 'Escape') {
+        const conversation = conversations.find(c => c.id === currentConversationId);
+        if (conversation) {
+          currentConversationTitle.textContent = conversation.title || 'New Chat';
+        } else {
+          currentConversationTitle.textContent = 'New Chat';
+        }
+        currentConversationTitle.blur();
+      }
+    });
+
+    currentConversationTitle.addEventListener('blur', () => {
+      updateConversationTitle();
+    });
+
+    editTitleBtn?.addEventListener('click', () => {
+      currentConversationTitle.focus();
+      // Move cursor to end of text
+      const range = document.createRange();
+      const selection = window.getSelection();
+      range.selectNodeContents(currentConversationTitle);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
     sidebarToggle?.addEventListener("click", () => appContainer.classList.toggle("sidebar-visible"));
     document.getElementById('toggle-history')?.addEventListener("click", toggleHistorySection);
     newConversationBtn?.addEventListener("click", createNewConversation);
@@ -184,19 +233,42 @@ const ChatApp = (() => {
 
   // Create a new conversation
   function createNewConversation() {
-    const newId = Date.now().toString();
     const newConversation = {
-      id: newId,
-      title: `New Conversation`,
+      id: Date.now().toString(),
+      title: 'New Chat',
       messages: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       isArchived: false
     };
+    
     conversations.unshift(newConversation);
+    currentConversationId = newConversation.id;
     saveConversations();
-    loadConversation(newId);
-    editor.focus();
+    renderConversationList();
+    renderMessages();
+    
+    // Update the title in the UI
+    currentConversationTitle.contentEditable = 'true';
+    currentConversationTitle.textContent = 'New Chat';
+    currentConversationTitle.focus();
+    
+    // Add event listener to save the title when the user presses Enter
+    currentConversationTitle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const newTitle = currentConversationTitle.textContent.trim();
+        const conversation = conversations.find(c => c.id === currentConversationId);
+        if (conversation && newTitle !== conversation.title) {
+          conversation.title = newTitle;
+          conversation.updatedAt = new Date().toISOString();
+          saveConversations();
+          renderConversationList();
+        }
+        currentConversationTitle.blur();
+      }
+    });
+    
     return newConversation;
   }
 
@@ -205,8 +277,11 @@ const ChatApp = (() => {
     const conversation = conversations.find(c => c.id === conversationId);
     if (!conversation) return;
     
-    // Store the conversation ID first
+    // Update the current conversation ID and title
     currentConversationId = conversationId;
+    currentConversationTitle.textContent = conversation.title || 'New Chat';
+    
+    // Store the conversation ID in localStorage
     localStorage.setItem('current_conversation_id', currentConversationId);
     
     // Update the UI to reflect the active conversation
@@ -220,6 +295,8 @@ const ChatApp = (() => {
     if (editor) {
       editor.focus();
     }
+    
+    return conversation;
   }
   
   // Helper function to update the active conversation UI

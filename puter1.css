@@ -352,6 +352,69 @@
     align-items: center;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    gap: 0.75rem;
+  }
+
+  .conversation-title-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
+
+  .editable-title {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: text;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    min-width: 100px;
+    max-width: 100%;
+    outline: none;
+    border: 1px solid transparent;
+  }
+
+  .editable-title[contenteditable="true"]:focus,
+  .editable-title[contenteditable="true"]:hover {
+    background-color: var(--bg-secondary);
+    border-color: var(--border);
+  }
+
+  .editable-title[contenteditable="true"]:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  #edit-title-btn {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .conversation-title-container:hover #edit-title-btn,
+  #edit-title-btn:focus {
+    opacity: 1;
+  }
+
+  #edit-title-btn:hover {
+    color: var(--primary);
+    background-color: var(--bg-tertiary);
   }
   
   .sidebar-toggle {
@@ -381,29 +444,65 @@
   }
   
   .message {
-    max-width: 85%;
-    width: fit-content;
-    padding: 1.25rem 1.5rem;
-    border-radius: var(--radius);
-    line-height: 1.7;
-    background-color: var(--bg-secondary);
-    box-shadow: var(--shadow);
-    margin: 0.75rem 1.5rem;
-    transition: all 0.2s ease;
-    border: 1px solid var(--border);
+    max-width: 90%;
+    margin: 0.5rem 1rem 0.5rem 0.5rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    line-height: 1.6;
     position: relative;
-    animation: messageAppear 0.3s ease-out;
+    word-wrap: break-word;
+    animation: messageAppear 0.2s ease-out;
+    border: 1px solid transparent;
+    font-family: inherit;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   }
-
   .message.user {
     align-self: flex-end;
-    background: var(--primary);
-    color: white;
-    border-bottom-right-radius: 0.25rem;
-    margin-left: 2rem;
-    border: none;
+    border-bottom-left-radius: 0.25rem;
+    border-left: 3px solid var(--primary);
+    margin-left: auto;
+    color: #000000; /* Pure black for maximum contrast */
+    background-color: #f1f5f9; /* Light gray background */
+    padding: 1rem;
+    margin: 0.5rem 1rem 0.5rem 0;
+    max-width: 90%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    position: relative;
+    outline: none !important; /* Remove focus outline */
   }
-
+  
+  /* Dark theme overrides */
+  [data-theme="dark"] .message.user {
+    background: #0f172a; /* Dark blue background */
+    color: #ffffff;
+    border-color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+  
+  /* Hover effect */
+  .message.user:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+  }
+  
+  .message.user .message-content {
+    color: #000000; /* Pure black for maximum contrast */
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    padding: 0.25rem 0;
+    font-weight: 500; /* Slightly bolder text */
+  }
+  
+  [data-theme="dark"] .message.user .message-content {
+    color: #ffffff; /* Pure white for maximum contrast */
+    font-weight: 400; /* Normal weight in dark mode for better readability */
+    text-shadow: 0 0 1px rgba(255, 255, 255, 0.3); /* Subtle glow for better readability */
+  }
+  
+  .message.user .message-header {
+    margin-bottom: 0.5rem;
+  }
   .message.assistant {
     align-self: flex-start;
     background: var(--bg-secondary);
@@ -467,13 +566,13 @@
   }
 
   .message.user .role-icon {
-    background-color: white;
-    color: var(--primary);
+    background-color: var(--primary);
+    color: white;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
   
   .message.user .message-role {
-    color: white;
+    color: var(--primary);
   }
   
   .message-time {
@@ -485,7 +584,7 @@
   }
   
   .message.user .message-time {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--text-muted);
   }
 
   .message-actions {
@@ -545,7 +644,12 @@
   }
   
   .message.user .message-content {
-    color: white;
+    color: #000000 !important;
+    outline: none !important; /* Remove focus outline */
+  }
+  
+  [data-theme="dark"] .message.user .message-content {
+    color: #ffffff !important;
   }
 
   .message-content p {
@@ -692,7 +796,7 @@
   .message.user .message-content h4,
   .message.user .message-content h5,
   .message.user .message-content h6 {
-    color: white;
+    color: var(--text);
   }
 
   .message-content h1 { 
