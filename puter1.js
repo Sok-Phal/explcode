@@ -353,22 +353,94 @@ const ChatApp = (() => {
       </div>`;
   }
   
-  // Process message content to handle code blocks
+  // Escape HTML to prevent XSS
+  function escapeHtml(unsafe) {
+    return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // Process message content to handle markdown formatting
   function processMarkdownContent(content) {
     const container = document.createElement('div');
     
-    // Split content by code blocks
+    // First, escape all HTML to prevent XSS
+    content = escapeHtml(content);
+    
+    // Handle code blocks first to prevent markdown processing inside them
     const parts = content.split(/(```[\s\S]*?```)/g);
+    
+    const processTextPart = (text) => {
+      // Process headings (h1-h6)
+      text = text.replace(/^#{1,6}\s+(.+)$/gm, (match, heading) => {
+        const level = Math.min(6, (match.match(/#/g) || []).length);
+        return `<h${level}>${heading}</h${level}>`;
+      });
+      
+      // Process blockquotes
+      text = text.replace(/^>\s+(.+)$/gm, (match, quote) => {
+        return `<blockquote>${quote}</blockquote>`;
+      });
+      
+      // Process lists (unordered)
+      text = text.replace(/^(\s*[-*+]\s+.+$\n?)+/gm, (match) => {
+        const items = match.trim().split('\n');
+        const listItems = items.map(item => 
+          `<li>${item.replace(/^\s*[-*+]\s+/, '').trim()}</li>`
+        ).join('');
+        return `<ul>${listItems}</ul>`;
+      });
+      
+      // Process ordered lists
+      text = text.replace(/^(\s*\d+\.\s+.+$\n?)+/gm, (match) => {
+        const items = match.trim().split('\n');
+        const listItems = items.map(item => 
+          `<li>${item.replace(/^\s*\d+\.\s+/, '').trim()}</li>`
+        ).join('');
+        return `<ol>${listItems}</ol>`;
+      });
+      
+      // Process horizontal rules
+      text = text.replace(/^[-*_]{3,}$/gm, '<hr>');
+      
+      // Process inline formatting (bold, italic, strikethrough)
+      text = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+        .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
+        .replace(/~~(.*?)~~/g, '<del>$1</del>'); // Strikethrough
+      
+      // Process links (only http/https for security)
+      text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+        if (/^https?:\/\//.test(url)) {
+          return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+        }
+        return text; // If URL is not http/https, don't make it a link
+      });
+      
+      // Process paragraphs (split by double newline)
+      return text.split('\n\n').map(paragraph => {
+        if (!paragraph.trim()) return '';
+        // Don't wrap in <p> if it's already a block-level element
+        if (/^<(h[1-6]|ul|ol|li|blockquote|hr|pre|code)/i.test(paragraph.trim())) {
+          return paragraph;
+        }
+        return `<p>${paragraph.replace(/\n/g, '<br>')}</p>`;
+      }).join('');
+    };
     
     parts.forEach((part) => {
       if (part.startsWith('```') && part.endsWith('```')) {
-        // This is a code block
+        // Handle code blocks - display as plain text
         const codeContent = part.slice(3, -3).trim();
         const firstNewLine = codeContent.indexOf('\n');
         
         let language = 'text';
         let code = codeContent;
         
+        // Extract language if specified
         if (firstNewLine > 0) {
           const potentialLang = codeContent.substring(0, firstNewLine).trim();
           if (potentialLang && /^[a-zA-Z0-9_-]+$/.test(potentialLang)) {
@@ -381,7 +453,7 @@ const ChatApp = (() => {
         const codeBlock = document.createElement('div');
         codeBlock.className = 'code-block';
         
-        // Add code block header
+        // Create header with language and copy button
         const header = document.createElement('div');
         header.className = 'code-block-header';
         header.innerHTML = `
@@ -395,25 +467,20 @@ const ChatApp = (() => {
           </button>
         `;
         
-        // Add code content
+        // Create code content area
         const codeContentDiv = document.createElement('div');
         codeContentDiv.className = 'code-block-content';
         
+        // Use textContent to prevent any HTML rendering
         const pre = document.createElement('pre');
         const codeElement = document.createElement('code');
+        codeElement.textContent = code;
         
-        // Apply syntax highlighting if available
-        try {
-          const mode = CodeMirror.findModeByName(language) || 
-                      CodeMirror.findModeByMIME(`text/${language}`) || 
-                      CodeMirror.findModeByExtension(language) || 
-                      { mime: 'text/plain' };
-          
-          CodeMirror.runMode(code, mode.mime, codeElement);
-        } catch (e) {
-          console.error('Error highlighting code:', e);
-          codeElement.textContent = code;
-        }
+        // Add monospace styling
+        pre.style.fontFamily = 'var(--font-mono)';
+        pre.style.whiteSpace = 'pre-wrap';
+        pre.style.margin = '0';
+        pre.style.padding = '1em';
         
         pre.appendChild(codeElement);
         codeContentDiv.appendChild(pre);
@@ -421,7 +488,7 @@ const ChatApp = (() => {
         // Add copy functionality
         const copyBtn = header.querySelector('.copy-btn');
         copyBtn.addEventListener('click', () => {
-          navigator.clipboard.writeText(code)
+          navigator.clipboard.writeText(codeContent)
             .then(() => {
               const originalHTML = copyBtn.innerHTML;
               copyBtn.classList.add('copied');
@@ -442,22 +509,43 @@ const ChatApp = (() => {
             });
         });
         
-        // Append elements
+        // Assemble the code block
         codeBlock.appendChild(header);
         codeBlock.appendChild(codeContentDiv);
         container.appendChild(codeBlock);
       } else if (part.trim()) {
-        // Regular text content
-        const textElement = document.createElement('div');
-        // Convert newlines to <br> and handle markdown-style formatting
-        const formattedText = part
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
-          .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
-          .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>') // Inline code
-          .replace(/\n/g, '<br>'); // New lines
+        // Process regular markdown text (already escaped for HTML)
+        const processedText = processTextPart(part);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = processedText;
         
-        textElement.innerHTML = formattedText;
-        container.appendChild(textElement);
+        // Handle tables - convert to plain text
+        const tableElements = tempDiv.querySelectorAll('table');
+        tableElements.forEach(table => {
+          const rows = [];
+          table.querySelectorAll('tr').forEach(row => {
+            const rowData = [];
+            row.querySelectorAll('th, td').forEach(cell => {
+              rowData.push(cell.textContent);
+            });
+            rows.push(rowData.join(' | '));
+          });
+          
+          const pre = document.createElement('pre');
+          pre.textContent = rows.join('\n');
+          table.parentNode.replaceChild(pre, table);
+        });
+        
+        // Handle blockquotes
+        const blockquotes = tempDiv.querySelectorAll('blockquote');
+        blockquotes.forEach(blockquote => {
+          blockquote.textContent = '> ' + blockquote.textContent;
+        });
+        
+        // Append all child nodes
+        while (tempDiv.firstChild) {
+          container.appendChild(tempDiv.firstChild);
+        }
       }
     });
     
