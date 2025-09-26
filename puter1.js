@@ -54,12 +54,35 @@ const ChatApp = (() => {
     });
   }
 
+  // Toggle history section
+  function toggleHistorySection() {
+    const historySection = document.getElementById('history-section');
+    const toggleButton = document.getElementById('toggle-history');
+    
+    if (historySection && toggleButton) {
+      const isCollapsed = historySection.classList.toggle('collapsed');
+      toggleButton.classList.toggle('collapsed', isCollapsed);
+      localStorage.setItem('historyCollapsed', isCollapsed);
+    }
+  }
+  
   // Initialize the app
   async function init() {
     // Initialize Puter JS
     const puterInitialized = await initializePuter();
     if (!puterInitialized) {
       return;
+    }
+    
+    // Set initial state of history section
+    const isHistoryCollapsed = localStorage.getItem('historyCollapsed') === 'true';
+    if (isHistoryCollapsed) {
+      const historySection = document.getElementById('history-section');
+      const toggleButton = document.getElementById('toggle-history');
+      if (historySection && toggleButton) {
+        historySection.classList.add('collapsed');
+        toggleButton.classList.add('collapsed');
+      }
     }
     
     // Initialize CodeMirror editor
@@ -108,6 +131,7 @@ const ChatApp = (() => {
   // Set up event listeners
   function setupEventListeners() {
     sidebarToggle?.addEventListener("click", () => appContainer.classList.toggle("sidebar-visible"));
+    document.getElementById('toggle-history')?.addEventListener("click", toggleHistorySection);
     newConversationBtn?.addEventListener("click", createNewConversation);
     sendBtn?.addEventListener("click", sendMessage);
     searchInput?.addEventListener("input", () => renderConversationList());
