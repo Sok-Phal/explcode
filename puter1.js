@@ -686,20 +686,22 @@ const ChatApp = (() => {
   // Render messages for the current conversation
   function renderMessages() {
     const conversation = conversations.find(c => c.id === currentConversationId);
-    
-    // Clear messages container first
+    if (!conversation) return;
+
+    // Always set the title from the conversation object
+    currentConversationTitle.textContent = conversation.title || 'New Chat';
+
+    // Clear the messages container
     messagesContainer.innerHTML = '';
-    
-    if (!conversation || conversation.messages.length === 0) {
-      currentConversationTitle.textContent = 'New Chat';
+
+    // If no messages, just return after setting title
+    if (!conversation.messages || conversation.messages.length === 0) {
       return;
     }
-    
-    currentConversationTitle.textContent = conversation.title;
 
     conversation.messages.forEach(message => {
-      if (!message.content) return; // Skip empty messages
-      
+      if (!message.content) return;
+
       const messageElement = document.createElement('div');
       messageElement.className = `message ${message.role}`;
       if (message.isError) messageElement.classList.add('error');
@@ -747,27 +749,23 @@ const ChatApp = (() => {
       // Create message content container
       const contentDiv = document.createElement('div');
       contentDiv.className = 'message-content';
-      
-      // Process message content with markdown and code blocks
+
+      // Process message content with markdown/code blocks
       const messageContent = String(message.content || '');
       const processedContent = processMarkdownContent(messageContent);
       contentDiv.appendChild(processedContent);
-      
-      // Store the raw message content in a data attribute for easy copying
+
+      // Store raw content for copy button
       messageElement.dataset.messageContent = messageContent.replace(/<[^>]*>?/gm, '');
-      
-      // Assemble the message
+
+      // Assemble message element
       messageElement.appendChild(headerDiv);
       messageElement.appendChild(contentDiv);
       messagesContainer.appendChild(messageElement);
     });
-    
-    // Initialize CodeMirror for all code blocks
-    document.querySelectorAll('.code-block').forEach(block => {
-      initializeCodeBlock(block);
-    });
-    
-    // Setup copy buttons
+
+    // Initialize code blocks and copy buttons
+    document.querySelectorAll('.code-block').forEach(block => initializeCodeBlock(block));
     setupCodeCopyButtons();
     
     // Add event listeners for message copy buttons
